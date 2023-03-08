@@ -72,6 +72,7 @@ namespace Pato {
             // advanced resolver hookeyjoo
             return null;
         }
+        public T? ValueAs<T>(string name) => Data.ValueAs<T>(name);
         public int Compare(Atoms atom) {
             return Processor.Compare(this, atom);
         }

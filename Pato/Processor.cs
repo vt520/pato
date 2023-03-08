@@ -213,8 +213,14 @@ namespace Pato {
         /// </summary>
         /// <param name="atoms">The value you want to create from</param>
         /// <returns>a new Atoms value, if compatible, null otherwise</returns>
-        public virtual Atoms? CreateFrom(Atoms? atoms) =>
-            CreateFromDictionary(atoms?.Data) ?? new() { Processor = this, Value = atoms?.Value };
+        public virtual Atoms? CreateFrom(Atoms? atoms, bool using_source = false) {
+            if (atoms is null) return null;
+            if (using_source) return new Atoms { Processor = this, Value = atoms.SourceValue };
+            return CreateFromDictionary(atoms?.Data) ?? new() {
+                Processor = this,
+                Value = atoms!.Value
+            };
+        }
         /// <summary>
         /// Uses the default normal to create a value from values, 
         /// if it cannot create a value using the given dictionary, 
@@ -350,30 +356,12 @@ namespace Pato {
             // 0 left == right
             // 1 left > right
         }
-        /*public virtual Atoms? AsTypeWith(Atoms values, params string[] requested_atoms) {
-            if (values.Keys.ContainsAll(requested_atoms)) return values;
-            List<Processor> potential_processors = Instances.Values.Where(item => item.Atoms.ContainsAll(requested_atoms)).ToList();
-            potential_processors = potential_processors.OrderByDescending(item=>item.DefaultConfidence).ToList();
-            if(ConvertsTo().Intersect(potential_processors) is IEnumerable<Processor> local_convertable) {
-                foreach(Processor canidate_type in local_convertable) {
-                    if (ConvertTo(canidate_type, values) is Atoms result) return result;
-                }
+        public static Atoms? Parse(string value) {
+            if(ProcessorFor(value) is Processor processor) {
+                return new() { Processor = processor, Value = value };
             }
-            foreach(Processor canidate_type in potential_processors) {
-
-            }
-
-            foreach(Processor canidate_type in potential_processors) {
-
-            }
-            List<Processor> canidates =
-                ConvertsTo().Union(values.Processor.ConvertsTo()).Distinct()
-                .Where(item => item.Atoms.ContainsAll(requested_atoms))
-                .ToList();
-
             return null;
-        }*/
-
+        }
         public virtual string PrepareValue(string value) => value;
 
     }

@@ -23,7 +23,6 @@ namespace Pato {
             }
             return value.GetValueHashCode(keys);
         }
-
         public static T? ValueAs<T>(this IDictionary<string, string?>? source, string key) {
             if (source is null) return default;
             try {
