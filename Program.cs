@@ -64,6 +64,9 @@ namespace Pato
         ///         
         ///     Every Atoms object has an associated Processor; which if unstated or null will be inferred from 
         ///     the current value contained in SourceValue
+        ///     
+        /// Processors:
+        ///     
         /// </summary>
         /// <param name="args"></param>
         /// <returns></returns>
