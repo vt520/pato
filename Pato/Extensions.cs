@@ -4,6 +4,7 @@ using System.Text.RegularExpressions;
 using System.Collections.Immutable;
 using System.Data;
 using Pato;
+using System.Runtime.CompilerServices;
 
 namespace Pato {
     public static class Extensions {
@@ -23,28 +24,64 @@ namespace Pato {
             }
             return value.GetValueHashCode(keys);
         }
+        public static Stack<T> ToStack<T>(this IEnumerable<T>? source) {
+            Stack<T> stack = new();
+            if (source is not null) foreach (T item in source) stack.Push(item);
+            return stack;
+        }
+        public static T? ValueAs<T>(this string? source) {
+            source ??= string.Empty;
+            if (typeof(T) == typeof(string)) return (T)((object)source);
+            Type type_type = typeof(T);
+            Type type_byref = type_type.MakeByRefType();
+            if (type_type.GetMethod(
+                "TryParse", 
+                BindingFlags.Public | BindingFlags.Static, 
+                new Type[] { typeof(string), type_byref }) 
+            is MethodInfo try_method) {
+                object?[] parameters = { source, default(T) };
+                if(try_method.Invoke(null, parameters) is bool result && result) {
+                    return (T?)parameters[1];
+                } 
+            } else if (type_type.GetMethod("Parse", BindingFlags.Public | BindingFlags.Static, new Type[] { typeof(string) }) is MethodInfo parse_method) {
+                try {
+                    
+                    if (parse_method.Invoke(null, new object?[] { source }) is T result) {
+                        return result;
+                    }
+                } catch (TargetInvocationException ex) {
+                    if (ex.InnerException is FormatException) return default(T);
+                } catch {
+                }
+            }
+            return default(T);
+        }
+        public static string? ValueOf(this IDictionary<string, string?>? source, string key) {
+            if (source is not null) {
+                if (source.TryGetValue(key, out string value) && !string.IsNullOrEmpty(value)) return value;
+            }
+            return null;
+        }
         public static T? ValueAs<T>(this IDictionary<string, string?>? source, string key) {
             if (source is null) return default;
-            try {
-                if (source.TryGetValue(key, out string? value)) {
-                    if (typeof(T) == typeof(string)) return (T)(object)value!;
-                    if (typeof(T).GetMethod("Parse", BindingFlags.Public | BindingFlags.Static, new Type[] { typeof(string) }) is MethodInfo method) {
-                        if (method.Invoke(null, new object?[] { value }) is T result) {
-                            return result;
-                        }
-                    }
-                    return default;
-                }
-                return default;
-            } catch (TargetInvocationException ex) {
-                if (ex.InnerException is not FormatException) throw ex.InnerException;
-                return default;
-            } catch {
-                throw;
-            }
-            throw new EntryPointNotFoundException();
+            if (source.TryGetValue(key, out string? value)) return value.ValueAs<T>();
+            return default(T);
         }
 
+        public static IEnumerable<Processor> EventuallyCreatableFrom(this Processor processor, IEnumerable<Processor>? evaluated = null) {
+            evaluated ??= new List<Processor>();
+            List<Processor> working = new(evaluated);
+            if (!evaluated.Contains(processor)) {
+                foreach (Processor from in processor.CreatableFrom) {
+                    working.Add(from);
+                    if (from.EventuallyCreatableFrom(working) is IEnumerable<Processor> indirect_from) {
+                        working = working.Union(indirect_from).ToList();
+                    }
+                }
+            }
+            return evaluated;
+
+        }
         /// <summary>
         /// Returns true if all elements of objects are found in source
         /// </summary>
@@ -60,7 +97,7 @@ namespace Pato {
         }
 
         /// <summary>
-        /// Extension method for selecting a processor for a given string value
+        /// Extension parse_method for selecting a processor for a given string value
         /// </summary>
         /// <param name="processors">An enumeration of currently instatiated processors</param>
         /// <param name="value">The string value you want to find a processor for</param>

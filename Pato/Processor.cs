@@ -5,6 +5,7 @@ using System.Text.Json;
 using System.Collections.Immutable;
 using System.Data;
 using Pato.Values;
+using System.Linq;
 
 namespace Pato {
     /// <summary>
@@ -56,7 +57,7 @@ namespace Pato {
         /// <summary>
         /// Returns a read-only copy of the global instance cache
         /// </summary>
-        protected static IDictionary<Type, Processor> Instances {
+        public static IDictionary<Type, Processor> Instances {
             get {
                 if (!InstancesValid) {
                     foreach (Assembly assembly in UncheckedAssemblies) {
@@ -165,13 +166,13 @@ namespace Pato {
         /// Returns a list of Processors that this Processor can natively create value for
         /// </summary>
         /// <returns>a list of Processors</returns>
-        public virtual IEnumerable<Processor> ConvertsTo() => new List<Processor>();
+        public virtual IEnumerable<Processor> ConvertsTo => new List<Processor>();
         /// <summary>
-        /// Tests if a Processor is in the ConvertsTo list
+        /// Tests if a Processor is in the CanConvertTo list
         /// </summary>
         /// <param name="processor"></param>
         /// <returns></returns>
-        public bool ConvertsTo(Processor processor) => ConvertsTo().Contains(processor);
+        public bool CanConvertTo(Processor processor) => ConvertsTo.Contains(processor);
         /// <summary>
         /// A list of Processors that contain value that can be used to create new Atoms of this type
         /// </summary>
@@ -267,35 +268,6 @@ namespace Pato {
         /// <returns>Atoms if the conversion is sucessful, otherwise null</returns>
         public virtual Atoms? ConvertTo(Processor processor, IDictionary<string, string?>? atoms) => null;
 
-
-
-        /*        public bool Converts(Processor processor) {
-                    //wtf?
-                    if (CanCreateFromDictionary(processor)) return true;
-                    if (processor.ConvertsTo(this)) return true;
-                    if (CanCreateFromDictionary(processor) || processor.ConvertsTo(this)) {
-                        return true;
-                    }
-                    foreach (Processor subprocessor in CreatableFrom()) {
-                        if (subprocessor.CanCreateFromDictionary(this)) { return true; }
-                    }
-                    return false;
-                }
-                public Atoms? Convert(Atoms? values) {
-                    //wtf?
-                    if (values is not null) {
-                        if (CanCreateFromDictionary(values.Processor) && CreateFromDictionary(values) is Atoms converted_from) {
-                            return converted_from;
-                        }
-                        if (values.Processor.ConvertsTo(this) && values.Processor.ConvertTo(this, values) is Atoms converted_to) {
-                            return converted_to;
-                        }
-                        foreach (Processor intermediate in CreatableFrom()) {
-                            if (intermediate.CanCreateFromDictionary(values)) return Convert(intermediate.CreateFromDictionary(values));
-                        }
-                    }
-                    return null;
-                }*/
         public bool TryMakeCompatible(Atoms? atoms, out Atoms? result) {
             result = MakeCompatible(atoms);
             return result is not null;
@@ -310,6 +282,33 @@ namespace Pato {
         public virtual ICollection<string> Atoms { get; } = new Collection<string>() { NormalValue };
         public virtual ICollection<string> ValueAtoms { get => Atoms; }
         public virtual float DefaultConfidence { get; } = Confidence.Normal;
+        public ICollection<string> PossibleAtoms {
+            get => ResolvePossibleAtoms();
+        }
+        protected ICollection<string> ResolvePossibleAtoms(ICollection<Processor>? visited = null) {
+            visited ??= new List<Processor>();
+            if (visited.Contains(this)) return null!;
+            visited.Add(this); ;
+            List<string> result = new List<string>(Atoms);
+            foreach(Processor processor in ConvertsTo) {
+                if(!visited.Contains(processor)) continue;
+                if(processor.ResolvePossibleAtoms(visited) is ICollection<string> to_inferable) {
+                    result = result.Union(to_inferable).ToList();
+                }
+            }
+            foreach(Processor creatable in this.EventuallyCreatableFrom()) {
+
+            }
+            Stack<Processor> downconversion = Instances.Values.Where(item=>item.IsCreatableFrom(this)).ToStack();
+            while(downconversion.TryPop(out Processor? creatable)) {
+                if (visited.Contains(creatable)) continue;
+                if(creatable.ResolvePossibleAtoms(visited) is ICollection<string> from_inferable) {
+                    result = result.Union(from_inferable).ToList();
+                }
+
+            }
+            return result.Distinct().ToList();
+        }
         public virtual IDictionary<string, string?> Atomize(string source_value) {
             string working_value = PrepareValue(source_value);
             IDictionary<string, string?> atoms = DefaultAtoms;

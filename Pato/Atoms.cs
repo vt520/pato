@@ -16,7 +16,7 @@ namespace Pato {
         private IDictionary<string, string?>? _Data = null;
         public ICollection<string> ValueAtoms => Processor.ValueAtoms;
         public ICollection<string> CurrentAtoms => Data.Keys.ToList();
-        public ICollection<string> AvailableAtoms => CurrentAtoms;
+        public ICollection<string> AvailableAtoms => CurrentAtoms.Union(Processor.PossibleAtoms).ToList();
 
         private int DictionaryHash = 0;
         public bool CacheValid { get; internal set; } = false;
@@ -25,6 +25,7 @@ namespace Pato {
             get {
                 _Data ??= new Dictionary<string, string?>();
                 if (!CacheValid) {
+                    Suppliments.Clear();
                     foreach ((string name, string? value) in Processor.Atomize(SourceValue)) {
                         if (!_Data.ContainsKey(name)) {
                             _Data.Add(name, value);
@@ -48,6 +49,7 @@ namespace Pato {
                 }
             }
         }
+        public ICollection<Atoms> Suppliments = new List<Atoms>();
         public bool IsValid => Processor.CanCreateFromDictionary(_Data);
         public static implicit operator string?(Atoms value) => value.Value;
         public static explicit operator Atoms(string value) => new() { Value = value };
@@ -67,12 +69,41 @@ namespace Pato {
                 SourceValue = value ?? string.Empty;
             }
         }
-        public string? ValueOf(string name) {
-            if (Data.TryGetValue(name, out string? value)) return value;
-            // advanced resolver hookeyjoo
+        protected string? GetSuppliment(string name) {
+            List<Atoms> associated_values = new() { this };
+            associated_values = associated_values.Union(Suppliments).ToList();
+            if(associated_values.Where(item=>item.CurrentAtoms.Contains(name)) is IEnumerable<Atoms> existing_values) {
+                if(existing_values.FirstOrDefault() is Atoms existing_value) return existing_value.ValueOf(name);
+            }
+            if(Processor.Instances.Values.Where(item=>item.Atoms.Contains(name)).OrderByDescending(item=>item.DefaultConfidence) is IEnumerable<Processor> suppliment_providers) { 
+                foreach(Processor converter in Processor.ConvertsTo) {
+                    if(suppliment_providers.Contains(converter)) {
+                        if(Processor.ConvertTo(converter, this) is Atoms converted) {
+                            Suppliments.Add(converted);
+                            return converted.ValueOf(name);
+                        }
+                    }
+                }
+                foreach(Processor canidate in suppliment_providers) {
+                    foreach(Atoms value in associated_values) {
+                        if(canidate.IsCreatableFrom(value)) {
+                            if(canidate.CreateFrom(value) is Atoms result) {
+                                Suppliments.Add(result);
+                                return result.ValueOf(name);
+                            }
+                        }
+                    }
+                }
+            }
             return null;
         }
-        public T? ValueAs<T>(string name) => Data.ValueAs<T>(name);
+        public string? ValueOf(string name) {
+            if (Data.TryGetValue(name, out string? value)) return value;
+
+            // advanced resolver hookeyjoo
+            return GetSuppliment(name);
+        }
+        public T? ValueAs<T>(string name) => ValueOf(name).ValueAs<T>();
         public int Compare(Atoms atom) {
             return Processor.Compare(this, atom);
         }
